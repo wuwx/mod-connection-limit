@@ -76,10 +76,12 @@ static int connection_limit_handler(request_rec *r)
         ap_rprintf(r, "<th>Count</th>");
         ap_rprintf(r, "<th>Limit</th>");
         ap_rprintf(r, "<th>Current</th>");
+        ap_rprintf(r, "<th>UpdatedAt</th>");
+        ap_rprintf(r, "<th>LeftTime</th>");
         ap_rprintf(r, "</tr>");
         for (src = r->connection->vhost_lookup_data; src; src = src->next) {
             config = (connection_limit_server_config *) ap_get_module_config(src->server->module_config, &connection_limit_module);
-            if (config->updated_at < updated_at) {
+            if ((config->updated_at < updated_at) || (config->updated_at - updated_at) > config->connection_update * 1e6) {
                 config->updated_at = updated_at + config->connection_update * 1e6;
                 config->current_connection = 0;
             }
@@ -88,17 +90,19 @@ static int connection_limit_handler(request_rec *r)
             ap_rprintf(r, "<td>%d</td>", config->connection_count);
             ap_rprintf(r, "<td>%d</td>", config->connection_limit);
             ap_rprintf(r, "<td bgcolor='#CCCCCC'>%d</td>", config->current_connection);
+            ap_rprintf(r, "<td>%lu</td>", config->updated_at);
+            ap_rprintf(r, "<td>%lu</td>", config->updated_at - updated_at);
             ap_rprintf(r, "</tr>");
         }
         ap_rprintf(r, "</table>");
         return OK;
 
-    } else if (r->content_type != NULL && !strcmp(r->handler, r->content_type)) {
+    } else if ((r->content_type != NULL && !strcmp(r->handler, r->content_type)) || (!(config->connection_enable))) {
         return DECLINED;
 
     } else {
         config = (connection_limit_server_config *) ap_get_module_config(r->server->module_config, &connection_limit_module);
-        if (config->updated_at < updated_at) {
+        if ((config->updated_at < updated_at) || ((config->updated_at - updated_at) > config->connection_update * 1e6)) {
             config->updated_at = updated_at + config->connection_update * 1e6;
             config->current_connection = 0;
         }
@@ -126,11 +130,32 @@ static void * connection_limit_create_server_config(apr_pool_t *p, server_rec *s
     connection_limit_server_config *config;
     apr_shm_create(&shm, sizeof(connection_limit_server_config), NULL, p);
     config = (connection_limit_server_config *)apr_shm_baseaddr_get(shm);
-    config->connection_limit = 100;
-    config->connection_update = 30;
+
+    config->connection_enable = 0;
+    config->connection_limit = 0;
+    config->connection_update = 0;
+
     config->connection_count = 0;
     config->current_connection = 0;
     config->updated_at = 0;
+
+    return config;
+}
+
+static void * connection_limit_merge_server_config(apr_pool_t *p, void *base, void *overrides)
+{
+    apr_shm_t *shm;
+    connection_limit_server_config *config;
+    apr_shm_create(&shm, sizeof(connection_limit_server_config), NULL, p);
+    config = (connection_limit_server_config *)apr_shm_baseaddr_get(shm);
+
+    connection_limit_server_config *parent = base;
+    connection_limit_server_config *child = overrides;
+
+    if (!child->connection_limit) {
+        config->connection_limit = parent->connection_limit;
+    }
+
     return config;
 }
 
@@ -161,7 +186,7 @@ module AP_MODULE_DECLARE_DATA connection_limit_module = {
     NULL,                                         /* create per-dir    config structures */
     NULL,                                         /* merge  per-dir    config structures */
     connection_limit_create_server_config,        /* create per-server config structures */
-    NULL,                                         /* merge  per-server config structures */
+    connection_limit_merge_server_config,         /* merge  per-server config structures */
     connection_limit_cmds,                        /* table of config file commands       */
     connection_limit_register_hooks               /* register hooks                      */
 };
