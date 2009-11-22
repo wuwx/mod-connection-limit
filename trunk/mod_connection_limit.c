@@ -97,7 +97,7 @@ static int connection_limit_handler(request_rec *r)
         ap_rprintf(r, "</table>");
         return OK;
 
-    } else if ((r->content_type != NULL && !strcmp(r->handler, r->content_type)) || (!(config->connection_enable))) {
+    } else if (r->content_type != NULL && !strcmp(r->handler, r->content_type)) {
         return DECLINED;
 
     } else {
