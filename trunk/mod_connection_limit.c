@@ -33,8 +33,6 @@
 **    Server: Apache/1.3.4 (Unix)
 **    Connection: close
 **    Content-Type: text/html
-**  
-**    The sample page from mod_connection_limit.c
 */ 
 
 
@@ -82,7 +80,7 @@ static int connection_limit_handler(request_rec *r)
         for (src = r->connection->vhost_lookup_data; src; src = src->next) {
             config = (connection_limit_server_config *) ap_get_module_config(src->server->module_config, &connection_limit_module);
             if (!config->connection_enable) {
-                break;
+                continue;
             }
 
             if (config->updated_at < updated_at) {
@@ -150,23 +148,6 @@ static void * connection_limit_create_server_config(apr_pool_t *p, server_rec *s
     config->connection_count = 0;
     config->current_connection = 0;
     config->updated_at = 0;
-
-    return config;
-}
-
-static void * connection_limit_merge_server_config(apr_pool_t *p, void *base, void *overrides)
-{
-    apr_shm_t *shm;
-    connection_limit_server_config *config;
-    apr_shm_create(&shm, sizeof(connection_limit_server_config), NULL, p);
-    config = (connection_limit_server_config *)apr_shm_baseaddr_get(shm);
-
-    connection_limit_server_config *parent = base;
-    connection_limit_server_config *child = overrides;
-
-    if (!child->connection_limit) {
-        config->connection_limit = parent->connection_limit;
-    }
 
     return config;
 }
