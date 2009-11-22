@@ -37,37 +37,132 @@
 **    The sample page from mod_connection_limit.c
 */ 
 
+
 #include "httpd.h"
 #include "http_config.h"
 #include "http_protocol.h"
 #include "ap_config.h"
 
-/* The sample content handler */
+typedef struct name_chain name_chain;
+struct name_chain {
+    name_chain *next;
+    server_addr_rec *sar;
+    server_rec *server;
+};
+
+typedef struct connection_limit_server_config connection_limit_server_config;
+struct connection_limit_server_config {
+    int connection_enable;
+    int connection_limit;
+    int connection_update;
+    int connection_count;
+    int current_connection;
+    unsigned long updated_at;
+};
+
+module AP_MODULE_DECLARE_DATA connection_limit_module;
+
 static int connection_limit_handler(request_rec *r)
 {
-    if (strcmp(r->handler, "connection_limit")) {
-        return DECLINED;
-    }
-    r->content_type = "text/html";      
+    
+    unsigned long updated_at = apr_time_now();
+    connection_limit_server_config *config;
 
-    if (!r->header_only)
-        ap_rputs("The sample page from mod_connection_limit.c\n", r);
-    return OK;
+    if (!strcmp(r->handler, "connection_limit")) {
+        r->content_type = "text/html";      
+        name_chain *src;
+        ap_rprintf(r, "<table><tr>");
+        ap_rprintf(r, "<th>Vhost</th>");
+        ap_rprintf(r, "<th>Count</th>");
+        ap_rprintf(r, "<th>Limit</th>");
+        ap_rprintf(r, "<th>Current</th>");
+        ap_rprintf(r, "</tr>");
+        for (src = r->connection->vhost_lookup_data; src; src = src->next) {
+            config = (connection_limit_server_config *) ap_get_module_config(src->server->module_config, &connection_limit_module);
+            if (config->updated_at < updated_at) {
+                config->updated_at = updated_at + config->connection_update * 1e6;
+                config->current_connection = 0;
+            }
+            ap_rprintf(r, "<tr>");
+            ap_rprintf(r, "<td><a href='http://%s/'>%s</a></td>", src->server->server_hostname, src->server->server_hostname);
+            ap_rprintf(r, "<td>%d</td>", config->connection_count);
+            ap_rprintf(r, "<td>%d</td>", config->connection_limit);
+            ap_rprintf(r, "<td bgcolor='#CCCCCC'>%d</td>", config->current_connection);
+            ap_rprintf(r, "</tr>");
+        }
+        ap_rprintf(r, "</table>");
+        return OK;
+
+    } else if (r->content_type != NULL && !strcmp(r->handler, r->content_type)) {
+        return DECLINED;
+
+    } else {
+        config = (connection_limit_server_config *) ap_get_module_config(r->server->module_config, &connection_limit_module);
+        if (config->updated_at < updated_at) {
+            config->updated_at = updated_at + config->connection_update * 1e6;
+            config->current_connection = 0;
+        }
+        config->current_connection++;
+        config->connection_count++;
+
+        if (config->current_connection > config->connection_limit) {
+            return HTTP_SERVICE_UNAVAILABLE;
+        } else {
+            return DECLINED;
+	}
+
+    }
+
 }
 
 static void connection_limit_register_hooks(apr_pool_t *p)
 {
-    ap_hook_handler(connection_limit_handler, NULL, NULL, APR_HOOK_MIDDLE);
+    ap_hook_handler(connection_limit_handler, NULL, NULL, APR_HOOK_FIRST);
 }
 
-/* Dispatch list for API hooks */
+static void * connection_limit_create_server_config(apr_pool_t *p, server_rec *s)
+{
+    apr_shm_t *shm;
+    connection_limit_server_config *config;
+    apr_shm_create(&shm, sizeof(connection_limit_server_config), NULL, p);
+    config = (connection_limit_server_config *)apr_shm_baseaddr_get(shm);
+    config->connection_limit = 100;
+    config->connection_update = 30;
+    config->connection_count = 0;
+    config->current_connection = 0;
+    config->updated_at = 0;
+    return config;
+}
+
+static const char* set_connection_limit(cmd_parms *cmd, void* cfg, const char* arg)
+{
+    connection_limit_server_config *config;
+    config = (connection_limit_server_config *)ap_get_module_config(cmd->server->module_config, &connection_limit_module);
+    config->connection_limit = atoi((char *)arg);
+    return NULL;
+}
+
+static const char* set_connection_update(cmd_parms *cmd, void* cfg, const char* arg)
+{
+    connection_limit_server_config *config;
+    config = (connection_limit_server_config *)ap_get_module_config(cmd->server->module_config, &connection_limit_module);
+    config->connection_update = atoi((char *)arg);
+    return NULL;
+}
+
+static const command_rec connection_limit_cmds[] = {
+    AP_INIT_TAKE1("ConnectionLimit", set_connection_limit, NULL, RSRC_CONF, ""),
+    AP_INIT_TAKE1("ConnectionUpdate", set_connection_update, NULL, RSRC_CONF, ""),
+    {NULL}
+};
+
 module AP_MODULE_DECLARE_DATA connection_limit_module = {
     STANDARD20_MODULE_STUFF, 
-    NULL,                  /* create per-dir    config structures */
-    NULL,                  /* merge  per-dir    config structures */
-    NULL,                  /* create per-server config structures */
-    NULL,                  /* merge  per-server config structures */
-    NULL,                  /* table of config file commands       */
-    connection_limit_register_hooks  /* register hooks                      */
+    NULL,                                         /* create per-dir    config structures */
+    NULL,                                         /* merge  per-dir    config structures */
+    connection_limit_create_server_config,        /* create per-server config structures */
+    NULL,                                         /* merge  per-server config structures */
+    connection_limit_cmds,                        /* table of config file commands       */
+    connection_limit_register_hooks               /* register hooks                      */
 };
 
