@@ -57,7 +57,7 @@ struct connection_limit_server_config {
     int connection_update;
     int connection_count;
     int current_connection;
-    unsigned long updated_at;
+    long long unsigned int updated_at;
 };
 
 module AP_MODULE_DECLARE_DATA connection_limit_module;
@@ -65,7 +65,7 @@ module AP_MODULE_DECLARE_DATA connection_limit_module;
 static int connection_limit_handler(request_rec *r)
 {
     
-    unsigned long updated_at = apr_time_now();
+    long long unsigned int updated_at = apr_time_sec(apr_time_now());
     connection_limit_server_config *config;
 
     if (!strcmp(r->handler, "connection_limit")) {
@@ -85,8 +85,8 @@ static int connection_limit_handler(request_rec *r)
                 break;
             }
 
-            if ((config->updated_at < updated_at) || (config->updated_at - updated_at) > config->connection_update * 1e6) {
-                config->updated_at = updated_at + config->connection_update * 1e6;
+            if (config->updated_at < updated_at) {
+                config->updated_at = updated_at + config->connection_update;
                 config->current_connection = 0;
             }
             ap_rprintf(r, "<tr>");
@@ -94,8 +94,8 @@ static int connection_limit_handler(request_rec *r)
             ap_rprintf(r, "<td>%d</td>", config->connection_count);
             ap_rprintf(r, "<td>%d</td>", config->connection_limit);
             ap_rprintf(r, "<td bgcolor='#CCCCCC'>%d</td>", config->current_connection);
-            ap_rprintf(r, "<td>%lu</td>", config->updated_at);
-            ap_rprintf(r, "<td>%lu</td>", config->updated_at - updated_at);
+            ap_rprintf(r, "<td>%llu</td>", config->updated_at);
+            ap_rprintf(r, "<td>%llu</td>", config->updated_at - updated_at);
             ap_rprintf(r, "</tr>");
         }
         ap_rprintf(r, "</table>");
@@ -113,8 +113,8 @@ static int connection_limit_handler(request_rec *r)
             return DECLINED;
         }
 
-        if ((config->updated_at < updated_at) || ((config->updated_at - updated_at) > config->connection_update * 1e6)) {
-            config->updated_at = updated_at + config->connection_update * 1e6;
+        if ((config->updated_at < updated_at) || ((config->updated_at - updated_at) > config->connection_update)) {
+            config->updated_at = updated_at + config->connection_update;
             config->current_connection = 0;
         }
 
