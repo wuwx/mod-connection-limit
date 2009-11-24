@@ -43,7 +43,7 @@ typedef struct connection_limit_server_entry connection_limit_server_entry;
 struct connection_limit_server_entry {
     int connection_count;
     int current_connection;
-    long long unsigned int updated_at;
+    long unsigned int updated_at;
     connection_limit_server_entry *next;
     server_rec *server;
 };
@@ -62,7 +62,7 @@ module AP_MODULE_DECLARE_DATA connection_limit_module;
 static int connection_limit_handler(request_rec *r)
 {
     
-    long long unsigned int updated_at = apr_time_sec(apr_time_now());
+    long unsigned int updated_at = apr_time_sec(apr_time_now());
     connection_limit_server_config *config;
     connection_limit_server_entry *entry;
 
@@ -92,8 +92,8 @@ static int connection_limit_handler(request_rec *r)
             ap_rprintf(r, "<td>%d</td>", entry->connection_count);
             ap_rprintf(r, "<td>%d</td>", config->connection_limit);
             ap_rprintf(r, "<td bgcolor='#CCCCCC'>%d</td>", entry->current_connection);
-            ap_rprintf(r, "<td>%llu</td>", entry->updated_at);
-            ap_rprintf(r, "<td>%llu</td>", entry->updated_at - updated_at);
+            ap_rprintf(r, "<td>%lu</td>", entry->updated_at);
+            ap_rprintf(r, "<td>%lu</td>", entry->updated_at - updated_at);
             ap_rprintf(r, "</tr>");
         }
         ap_rprintf(r, "</table>");
