@@ -111,7 +111,7 @@ static int connection_limit_handler(request_rec *r)
             return DECLINED;
         }
 
-        if ((config->server_entry->updated_at < updated_at) || ((config->server_entry->updated_at - updated_at) > config->connection_update)) {
+        if (config->server_entry->updated_at < updated_at) {
             config->server_entry->updated_at = updated_at + config->connection_update;
             config->server_entry->current_connection = 0;
         }
