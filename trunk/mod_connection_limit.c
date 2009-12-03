@@ -105,10 +105,16 @@ static int connection_limit_handler(request_rec *r)
             return DECLINED;
         }
 
+
         if (r->content_type
-            && !strcmp(r->handler, r->content_type)
+            && strcmp(r->content_type, "application/x-httpd-php5")
+            && strcmp(r->content_type, "application/x-httpd-php4")
+
+            && r->handler
             && strcmp(r->handler, "application/x-httpd-php5")
-            && strcmp(r->handler, "application/x-httpd-php4")) {
+            && strcmp(r->handler, "application/x-httpd-php4")
+
+            && !strcmp(r->handler, r->content_type)) {
             return DECLINED;
         }
 
